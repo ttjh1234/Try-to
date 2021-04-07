@@ -1,0 +1,118 @@
+# 수명 분포 유도 및 시각화
+##################################################
+# 데이터 불러오기 + 데이터 구조 파악
+rm(list=ls())
+data=read.csv("c:/Users/-----/Desktop/NSC2_BND_1000.csv",encoding = "UTF-8")
+head(data)
+colnames(data)=c("RN_INDI","BTH_YYYY","DTH_YYYYMM","COD1","COD2")
+# 사망시간이 기록되어있는 데이터 수
+sum(is.na(data$DTH_YYYYMM)==F)
+data$DTH_YYYYMM[is.na(data$DTH_YYYYMM)==F]
+length(data)
+str(data)
+
+
+##################################################
+# 누락데이터 처리 및 변수 생성
+
+# 사망시간이 적혀있지 않은 사람들은 현재 생존하고 있다고 가정.
+# 사망시간이 적혀있지 않은 사람들의 사망 시간을 현재 시간으로 함.
+# 아직 사망하지 않았다는 전제하에 데이터들의 생존 시간 정보를 얻어야 한다고 생각.
+# 조사 시점 당시 2015년을 기준으로 사망시간이 없는 데이터들을 2015로 대치
+now='2015'
+nowfill=as.numeric(now)
+
+# 사망시간이 기록되어있는 데이터들은 모두 달까지 포함되어있다 이를 제거하여
+# 연도만 남게 조정한다.
+data$DTH_YYYYMM[is.na(data$DTH_YYYYMM)==F]=as.numeric(substring(data$DTH_YYYYMM[is.na(data$DTH_YYYYMM)==F],1,4))
+data$DTH_YYYYMM[is.na(data$DTH_YYYYMM)==T]=nowfill
+str(data)
+# 탄생 시간의 자료형이 문자로 되어있어서 숫자로 바꿔주려 했지만, 탄생시간에 문자열이 결합된 것도 있었다.
+# 따라서 먼저 탄생 시간에서 문자열을 떼주는 작업을 한다. ex) 1921LE -> 1921
+# 데이터 1921LE 2006년 기준 85세 해당(1921년 및 그 이전 출생자)자의 출생년도
+data$BTH_YYYY=gsub("[[:alpha:]]","",data$BTH_YYYY)
+data$BTH_YYYY=as.numeric(data$BTH_YYYY)      
+
+# 생존 시간 = 사망시간 - 출생시간
+data$survival_time=data$DTH_YYYYMM-data$BTH_YYYY
+st=data$survival_time
+st=sort(st)
+
+##################################################
+# 수명 분포를 위한 누적 분포 함수 만들기
+
+# 누적분포함수를 만들기. 이 데이터에서는 중복관측치가 있어 중복 데이터를 
+# 생각하여 분포함수를 만들어야한다.
+
+# 수명의 유니크 값들을 뽑아내고 그 개수만큼 확률 1/1000을 곱한다.
+p=1/length(st)
+length(unique(st))
+p2=rep(0,93)
+for(i in unique(st)){
+  p2[i+1]=p*length(st[st==i])
+}
+sum(p2)
+# 각 수명별 누적 분포 값
+for(i in 2:length(p2)){
+  p2[i]=p2[i-1]+p2[i]
+}
+length(unique(st))
+p2
+# st 데이터에 누적확률값 부여. 
+Fx=rep(0,1000)
+str(unique(st))
+for(i in 1:length(st)){
+  for(j in unique(st)){
+    if(st[i]==j){
+      Fx[i]=p2[j+1]
+      break
+    }
+  }
+}
+# 위험함수를 구하기 위해 누적분포값이 아닌 밀도값 변수 추가.
+p1=rep(0,93)
+for(i in unique(st)){
+  p1[i+1]=p*length(st[st==i])
+}
+fx=rep(0,1000)
+for(i in 1:length(st)){
+  for(j in unique(st)){
+    if(st[i]==j){
+      fx[i]=p1[j+1]
+      break
+    }
+  }
+}
+resultdata=data.frame(st,fx,Fx,1-Fx)
+colnames(resultdata)=c("x","fx","Fx","Sx")
+head(resultdata)
+##################################################
+# 시각화 part 
+
+par(mfrow=c(1,2))
+
+# 사망함수 시각화 
+# F(t)=P(T<t)
+plot(st,Fx,xlim=c(0,100),ylim=c(0,1),ylab="F(x)",xlab="life (year)",type='l',col='blue')
+title('Cumulative distribution function')
+
+# 생존함수 시각화
+# S(t)=1-F(t)
+plot(st,1-Fx,xlim=c(0,100),ylim=c(0,1),ylab="S(x)",xlab="life (year)",type='l',col='yellow')
+title('Survival function')
+
+# 위험함수 시각화
+# 위험함수 = f(x)/(1-F(x)) 
+# y 축 스케일 작업을 하기 전. 어느 한 순간에 급격히 떨어지는 것처럼 보인다. 
+par(mfrow=c(1,1))
+plot(st,fx/(1-Fx),ylab="h(X)",xlab="life (year)",type='l',col='red')
+title('hazard function')
+
+# 이유 : Fx=1 이 되는 시점에서 fx/1-Fx 가 정의되지않음
+# 998~1000에 해당하는 데이터가 Fx=1 이되어 오류.
+hx=fx[1:997]/(1-Fx[1:997])
+
+plot(st[1:997],hx,ylab="h(X)",xlab="life (year)",type='l',col='red')
+title('hazard function after treatment')
+
+# 결과 : 위험함수는 수명(시간)이 늘어남에 따라 위험이 올라가는 것을 확인 할 수 있다.
