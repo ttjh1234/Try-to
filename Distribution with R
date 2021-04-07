@@ -1,0 +1,45 @@
+# Beta(2,7)분포의 확률밀도함수를 구하고, 그 위에 95% 신뢰구간 표시.
+# Beta(alpha,beta)에서 x의 범위가 0~1에 존재할 수 있어, x를 세분화해서 정의
+x=seq(0,1,length=500)
+# Beta(2,7)의 확률 밀도 함수
+fx=dbeta(x,2,7)
+plot(x,fx,type='l',xlab='x',ylab='f(x)')
+title('Density function of Beta(2,7) with 95% C.I.')
+# 95% 신뢰구간 표시
+lu=qbeta(c(0.025,0.975),2,9)
+abline(v=lu,col='red')
+
+# B(n,0.3) 확률밀도 함수를 n=10,20,50,100의 네 가지 경우에 대하여 2*2 다중그림으로 나타내기.
+par(mfrow=c(2,2))
+# B(10,0.3) 
+x1=seq(0,10)
+plot(x1,dbinom(x1,10,0.3),xlab='x',ylab='f(x)')
+title('Density function of B(10,0.3)')
+# B(20,0.3)
+x2=seq(0,20)
+plot(x2,dbinom(x2,20,0.3),xlab='x',ylab='f(x)')
+title('Density function of B(20,0.3)')
+# B(50,0.3)
+x3=seq(0,50)
+plot(x3,dbinom(x3,50,0.3),xlab='x',ylab='f(x)')
+title('Density function of B(50,0.3)')
+# B(100,0.3)
+x4=seq(0,100)
+plot(x4,dbinom(x4,100,0.3),xlab='x',ylab='f(x)')
+title('Density function of B(100,0.3)')
+
+
+# 함수 f(x,y)=2x*2+3y^2에 대한 등고선도를 다중그림으로 나타내기.
+
+x=seq(-10,10,length=100)
+y=seq(-10,10,length=100)
+z=matrix(0,100,100)
+for(i in 1:100){
+  for(j in 1:100){
+    xy=c(x[i],y[i])
+    z[i,j]=2*x[i]^2+3*y[j]^2
+  }
+}
+par(mfrow=c(1,2))
+contour(x,y,z)
+persp(x,y,z,theta=45)
