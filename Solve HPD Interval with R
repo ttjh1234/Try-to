@@ -1,0 +1,63 @@
+## 격자점 방법 함수
+HPDgrid=function(prob,level){
+  prob.sort=sort(prob,decreasing = T)
+  M=min(which(cumsum(prob.sort)>=level))
+  height=prob.sort[M]
+  HPD.index=which(prob>=height)
+  HPD.level=sum(prob>=height)
+  res=list(index=HPD.index,level=HPD.level)
+  return(res)
+}
+N=1000
+theta=seq(0,1,length=N)
+prob=dbeta(theta,4,8)
+prob=prob/sum(prob)
+level=0.95
+HPD=HPDgrid(prob,0.95)
+HPDgrid.hat=c(min(theta[HPD$index]),max(theta[HPD$index]))
+par(mfrow=c(1,1))
+plot(theta,prob,type='l',ylab='prob',xlab='theta',xlim=c(0,1),
+     main="HPD Interval Using Grid and Sample")
+abline(v=HPDgrid.hat,col='blue')
+
+## 사후 분포 샘플링
+HPDsample=function(theta,level){
+  N=length(theta)
+  theta.sort=sort(theta)
+  M=ceiling(N*level)
+  nCI=N-M
+  CI.width=rep(0,nCI)
+  for(i in 1:nCI) CI.width[i]=theta.sort[i+M]-theta.sort[i]
+  index=which.min(CI.width)
+  HPD2=c(theta.sort[index],theta.sort[index+M])
+  return(HPD2)
+}
+N=1000
+theta=rbeta(N,4,8)
+level=0.95
+HPD2=HPDsample(theta,level)
+
+abline(v=HPD2,col='red')
+text(0.8,0.0018,"Blue : Grid \n red : Sample")
+
+# Posterior is Unimodal & Symetric
+# So equal HPD Interval with Confidence Interval
+HPD_4=c(qnorm(0.025,14.97,3.93^(1/2)),qnorm(0.975,14.97,3.93^(1/2)))
+HPD_4
+
+# Assumption : Prior : discrete U dist , {0.1,0.2,...,0.9}
+#              Data : Probablity of Success is theta, Xi ~ Ber(theta)
+#              given : N=20, Xbar=5
+theta=seq(0.1,0.9,0.1)
+result=theta^5*(1-theta)^15
+thetabarx=result/sum(result)
+copy=thetabarx
+sum=0
+for(i in 1:length(copy)){
+  if(sum<=0.95){
+  index=which.max(copy)
+  sum=sum+copy[index]
+  print(index)
+  copy[index]=0
+  }
+}
