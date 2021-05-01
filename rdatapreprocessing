@@ -1,0 +1,359 @@
+# 1 . 데이터 파일이 어떤 것에 해당하는 파일인지 파악하라.
+rm(list = ls())
+gc()
+library(dplyr)
+
+# wd 설정 
+setwd("C:/Users/-------/Desktop/OneDrive_2021-04-30/data")
+getwd()
+
+# wd 내에 있는 모든 파일 읽기
+fname = list.files("./")
+
+# 데이터의 식별은 nsc2_edu_000.txt 이므로 000을 따로 ID로 추출
+id=substring(fname,10,)
+id=gsub('.txt','',id)
+
+
+# 교육용 표본연구 DB 파일목록, 레이아웃, 코드표_ver2.0 의 파일목록 레이블 참조
+
+c1=c('자격 및 보험료','출생 및 사망','진료_의과,보건-일반내역','진료_의과,보건-진료내역','진료_의과,보건-상병내역',
+     '진료_의과,보건-처방내역','진료_치과-일반내역','진료_치과-진료내역','진료_치과-상병내역',
+     '진료_치과-처방내역','진료_한방-일반내역','진료_한방-진료내역','진료_한방-상병내역',
+     '진료_약국-일반내역','진료_약국-진료내역','건강검진','요양기관')
+c2=c('bnc','bnd','m20','m30','m40','m60','d20','d30','d40','d60','k20',
+     'k30','k40','p20','p30','g1e','inst')
+namelist=as.data.frame(cbind(c1,c2))
+namelist$c2
+namelist[match(id,namelist$c2),'c1']
+
+for(i in 1:length(fname)){
+  print(paste0(fname[i],' : ',namelist[match(id[i],namelist$c2),'c1']))
+}
+
+### 결과 
+#"nsc2_edu_bnc.txt : 자격 및 보험료"
+#"nsc2_edu_bnd.txt : 출생 및 사망"
+#"nsc2_edu_d20.txt : 진료_치과-일반내역"
+#"nsc2_edu_d30.txt : 진료_치과-진료내역"
+#"nsc2_edu_d40.txt : 진료_치과-상병내역"
+#"nsc2_edu_d60.txt : 진료_치과-처방내역"
+#"nsc2_edu_g1e.txt : 건강검진"
+#"nsc2_edu_inst.txt : 요양기관"
+#"nsc2_edu_k20.txt : 진료_한방-일반내역"
+#"nsc2_edu_k30.txt : 진료_한방-진료내역"
+#"nsc2_edu_k40.txt : 진료_한방-상병내역"
+#"nsc2_edu_m20.txt : 진료_의과,보건-일반내역"
+#"nsc2_edu_m30.txt : 진료_의과,보건-진료내역"
+#"nsc2_edu_m40.txt : 진료_의과,보건-상병내역"
+#"nsc2_edu_m60.txt : 진료_의과,보건-처방내역"
+#"nsc2_edu_p20.txt : 진료_약국-일반내역"
+#"nsc2_edu_p30.txt : 진료_약국-진료내역"
+
+# 2. 자격 및 보험료DB에 있는 개인고유번호의 집합과 출생 및 사망DB에 있는 개인고유
+# 번호의 집합이 같은지 확인하여라
+
+# 데이터 불러오기
+bnc = read.csv(fname[1], header = F, sep='|',stringsAsFactors = FALSE, skip = 1)
+names(bnc) =c('기준년도','개인고유번호','성','시도','가입자 구분','보험료분위','장애중증도구분',
+                        '장애유형구분','일반1차검진대상자여부','표본구분')
+head(bnc)
+
+bnd =read.csv(fname[2],header=F,sep='|',stringsAsFactors = F,skip=1)
+names(bnd)=c('개인고유번호','출생년도','사망년도','사망원인1','사망원인2')
+head(bnd)
+
+# BNC 데이터의 개인고유번호의 집합과 BND 데이터의 개인고유번호의 집합이 같은지 확인
+all(unique(bnc$개인고유번호) %in%unique(bnd$개인고유번호))
+# TRUE
+setdiff(unique(bnc$개인고유번호),unique(bnd$개인고유번호))
+#integer(0)
+setdiff(unique(bnd$개인고유번호),unique(bnc$개인고유번호))
+#integer(0)
+
+### 따라서 두 BNC 데이터와 BND 데이터의 개인고유번호 집합은 같다.
+
+#3. 85세 이상으로 생존해있는 사람들의 성비를 구하여라 (남:여)
+
+# 우선 85세 이상으로 생존해있는 사람들은 1921LE 중 사망하지 않은 사람 
+# 즉 사망년도가 NA인 사람들과 1920년대 사람들중 사망년도가 NA인 사람들이 
+# 아직 생존해있는 85세 이상 사람들이다.
+
+bnd$성=bnc[match(bnd$개인고유번호,bnc$개인고유번호),'성']
+sum(is.na(bnd$성)==T)
+# 0
+str(bnd) 
+d21e=bnd %>% filter(출생년도=='1921LE') 
+d21e=d21e[is.na(d21e$사망년도),]
+d20=bnd %>% filter(출생년도=='1920')
+d20=d20[is.na(d20$사망년도),]
+survival=rbind(d21e,d20)
+
+# 첨부파일 엑셀 파일을 참고, 남자=1, 여자=2
+mansurvived=sum(survival$성==1)
+womansurvived=sum(survival$성==2)
+print(paste0(mansurvived,':',womansurvived))
+# 5:26
+
+### 따라서 85세 이상으로 생존해있는 사람들의 성비는 5:26 (남:여)
+
+#4. 2013년 사망한 사람들 중 한국표준질병사인분류에 고의적자해에 해당하는 
+# 사람의 숫자를 구하여라.
+
+# 2013년도 사망자들을 bnd 데이터셋으로 추출 
+str(bnd)
+death2013=bnd %>% filter(사망년도==2013)
+
+# 한국표준질병사인분류에의하면 고의적 자해에 해당하는 사망원인 코드는 
+# X60-X84로 나온다.
+str(death2013)
+# 따라서 2013년 사망자 중 고의적 자해에 해당하는 사람의 숫자는 다음과 같이 계산되고
+
+nrow(death2013[death2013$사망원인1=='X60-X84'|death2013$사망원인2=='X60-X84',])
+
+### 2013년 사망한 사람들 중 고의적자해에 해당하는 사람의 수 : 2명
+
+#5.60년대생 생존자를 대상으로 해당 분석 기간 동안 개인별 요양일수의 합계가 
+#소득분위별로 어떻게 다른지 보여라.
+
+#### 데이터 전처리 ####
+# 5번과 6번 모두 진료데이터를 사용하기 때문에 요양일수와 심결요양급여비용총액을
+# 개인고유번호 별로 합쳐서 구한다.
+
+head(bnd)
+head(bnc)
+
+# 데이터 복제
+data=bnd
+str(data)
+
+# 데이터 만들기
+# 우선 열이름을 1:16으로 쉽게 설정
+headname=1:16
+# m20 d20 k20 p20 은 filname의 3,9,12,16 열에 존재
+# m20 d20 k20 은 데이터의 구조에 문제가 없으나
+# p20은 데이터에 이상치가 굉장히많아 p20을 제외하고 반복을 통해 데이터를 구축
+# csv 파일의 2 번째 열 : 개인고유번호, 9번째 열 : 요양일수, 13번째 열: 심결요양급여비용총액
+# 구분자가 , 으로 이전 파일과 다르다.
+for(i in c(3,9,12)){
+  a = read.csv(fname[i], header = F, sep=',',stringsAsFactors = FALSE, skip = 1)
+  names(a)=headname
+  
+  a1= a %>% select(2,9,13) 
+  names(a1)=c('개인고유번호','요양일수','심결요양급여비용총액')
+  a1$요양일수[is.na(a1$요양일수)==TRUE]=0
+  a1$심결요양급여비용총액[is.na(a1$심결요양급여비용총액)==TRUE]=0
+  a2=a1 %>% group_by(개인고유번호) %>% summarize(t_day=sum(요양일수),t_cost=sum(심결요양급여비용총액))
+  data = merge(data, a2, by.x = "개인고유번호", by.y = "개인고유번호", all = T)
+}
+# p20 데이터에 개인고유번호가 3자리부터 6자리까지 존재하는 경우도 존재하고,
+# BND 데이터에 없는 개인고유번호가 존재.
+# 따라서 그러한 개인고유번호를 제거하고, DATA 파일에 병합한다.
+a = read.csv(fname[16], header = F, sep=',',stringsAsFactors = FALSE, skip = 1)
+names(a)=headname
+
+a1= a %>% select(2,9,13) 
+names(a1)=c('개인고유번호','요양일수','심결요양급여비용총액')
+a2=a1 %>% group_by(개인고유번호) %>% summarize(t_day=sum(요양일수),
+                                         t_cost=sum(심결요양급여비용총액))
+
+str(a2)
+# 데이터를 확인했을때 개인고유번호에 대한 이상치가 존재하는것을 파악할 수 있었다.
+# 개인고유번호는 7자리 수 이여야하기때문에, 올바르지않은 개인고유번호는 제거
+a2=a2[a2$개인고유번호>999999,]
+# 또한 데이터에 개인보유번호가 같은 것만 a2에 저장
+a2=a2[unique(a2$개인고유번호) %in%unique(data$개인고유번호),]
+
+# m20 d20 k20 p20 의 요양일수와 심결요양급여비용총액을 개인고유번호에 따라 총합을 구함
+data=merge(data,a2,by.x='개인고유번호',by.y='개인고유번호',all=T)
+str(data)
+
+# 자료에서 소득 분위를 보험료 분위로 추정.
+# 자료에서 06,08,10,12 년을 기준으로 보험료 분위가 있는데
+# 12년을 먼저 사용하고 누락값을 10년, 08년, 06년으로 대치해서 사용
+# 결국 86개의 데이터에대해서는 보험료분위가 나타나지않는다.
+# 이 값은 추정하지는 않고 NA로 사용.
+
+sum(is.na(bnc$보험료분위)==T)
+bnc3=bnc[is.na(bnc$보험료분위)==F,]
+bnc4=bnc3 %>% select(기준년도,개인고유번호,보험료분위) %>% group_by(개인고유번호)
+
+# 2012년 먼저 보험료 분위를 채움
+bnc5=bnc4 %>% filter(기준년도==2012)
+bnc5=as.data.frame(bnc5)
+head(bnc5)
+str(bnc5)
+data2=data
+str(data2)
+data2$보험료분위=bnc5[match(data2$개인고유번호,bnc5$개인고유번호),'보험료분위']
+# 보험료분위가 없는 데이터를 2010년 데이터를 채워놓기 위해 따로 복사
+data3=data2[is.na(data2$보험료분위)==T,]
+str(data3)
+# 현재 2012년 보험료분위가 있는 데이터만 저장
+data2=data2[is.na(data2$보험료분위)==F,]
+str(data2)
+
+bnc6=bnc4 %>% filter(기준년도==2010)
+data3$보험료분위=bnc6[match(data3$개인고유번호,bnc6$개인고유번호),'보험료분위']
+# 보험료분위가 없는 데이터를 2008년 데이터를 채워놓기 위해 따로 복사
+data4=data3[is.na(data3$보험료분위)==T,]
+
+str(data4)
+data4$보험료분위=unlist(data4$보험료분위)
+data3=data3[is.na(data3$보험료분위)==F,]
+
+str(data3)
+data3$보험료분위=unlist(data3$보험료분위)
+
+# 2012년 보험료분위가 있는 데이터 + 2010년 보험료분위로 대치한 데이터 추가 
+data2=rbind(data2,data3)
+str(data2)
+
+bnc7=bnc4 %>% filter(기준년도==2008)
+data4$보험료분위=bnc7[match(data4$개인고유번호,bnc7$개인고유번호),'보험료분위']
+# 보험료분위가 없는 데이터를 2006년 데이터를 채워놓기 위해 따로 복사
+data5=data4[is.na(data4$보험료분위)==T,]
+str(data5)
+data5$보험료분위=unlist(data5$보험료분위)
+
+data4=data4[is.na(data4$보험료분위)==F,]
+
+str(data4)
+data4$보험료분위=unlist(data4$보험료분위)
+
+# 2012년, 2010년 + 2008년 보험료 분위로 대치한 데이터 추가
+data2=rbind(data2,data4)
+str(data2)
+
+
+bnc8=bnc4 %>% filter(기준년도==2006)
+data5$보험료분위=bnc8[match(data5$개인고유번호,bnc8$개인고유번호),'보험료분위']
+data6=data5[is.na(data5$보험료분위)==T,]
+str(data6)
+data6$보험료분위=unlist(data6$보험료분위)
+
+data5=data5[is.na(data5$보험료분위)==F,]
+
+str(data5)
+data5$보험료분위=unlist(data5$보험료분위)
+# 2012년, 2010년, 2008년 + 2006년 보험료 분위로 대치한 데이터 추가
+data2=rbind(data2,data5)
+# 나머지 결측치 데이터 추가
+data2=rbind(data2,data6)
+str(data2)
+
+#
+data=data2
+#
+sum(is.na(data$보험료분위)==T)
+# 86
+# 최대한 대치를 했지만, 86개의 개인고유번호에는 보험료분위가 누락되어있다. NA
+
+# 이제 개인별로 진료별 요양일수 총합과 심결요양급여비용총액의 총합을 구한다. 
+
+names(data)[7:14]=c('d1','c1','d2','c2','d3','c3','d4','c4')
+str(data)
+b1=data %>% group_by(개인고유번호) %>% summarize(day_total=sum(d1,d2,d3,d4,na.rm=T))
+
+data=merge(data,b1,by.x='개인고유번호',by.y='개인고유번호',all=T)
+str(data)
+
+b2=data %>% group_by(개인고유번호) %>% summarize(cost_total=sum(c1,c2,c3,c4,na.rm=T))
+
+data=merge(data,b2,by.x='개인고유번호',by.y='개인고유번호',all=T)
+str(data)
+
+# 개인별 요양일수 총합과 심결요양급여비용총액의 합을 구하고, 이제 1960년대 사람들 중 
+# 살아있는 사람은 출생년도가 1960이고, 사망년도가 NA인 분이므로 추출.
+data5=data[(data$출생년도=='1960')&(is.na(data$사망년도)==T),]
+
+head(data5)
+str(data5)
+sum(is.na(data5$보험료분위)==T)
+# 12명의 보험료 분위가 NA로 누락됌
+sum(is.na(data5$day_total)==T)
+# 0 NA 값 처리 완료
+min(data5$day_total)
+# 0 NA => 0으로 대체
+d1=data5 %>% select(개인고유번호,출생년도,보험료분위,day_total) %>% group_by(보험료분위) %>% summarize(q_total=sum(day_total))
+# 결과 출력
+d1
+# 
+plot(1:10,d1$q_total[1:10],main='1960년대 , 분위수별 요양일수 총합',xlab='소득분위',ylab='요양일수')
+
+summary(d1$q_total[1:10])
+cor(1:10,d1$q_total[1:10])
+# 분위수가 올라갈수록 요양일수의 총합이 대체로 커지는 경향을 보인다.
+# 상관계수가 0.6818471 으로 양의 상관이있음.
+# 소득 분위별로 10분위일 때가 제일 많고, 5분위일 때가 제일 적었다.
+# 1분위는 14990, 2분위는 20245, 3분위는 14796, 4분위는 19168, 5분위는 11083, 
+# 6분위는 11615, 7분위는 23816, 8분위는 20452, 9분위는 28850, 10분위는 34654 
+# 누락 분위수를 뺀 요양일수의 최소는 11083 1분위 14844 중앙값 19707, 평균 19958, 3분위수 22975 최대 34564로 나타났다.
+
+
+# 6. 소득 1분위에 있는 60년대 생존자를 대상으로 1인당 심결요양급여비용총액의 분포를 그리고,
+# 소득 10분위에 있는 60년대 생존자를 대상으로 1인당 심결요양급여비용총액의 분포를 그리고
+# 1분위와 10분위의 분포를 비교하자.
+
+# 5번 문제에서 이미 전처리와 병합을 통해 개인당 비용을 합친 상황
+# 또한 data5는 1960년대 생존자들의 데이터들이고, 
+# 따라서 소득 분위 1분위와 10분위만 추출한다.
+# 소득분위 1분위 = quan1 , 소득분위 10분위 = quan10
+str(data5)
+
+quan1=data5 %>% filter(보험료분위==1)
+quan10=data5 %>% filter(보험료분위==10)
+str(quan1)
+str(quan10)
+# 연속형 변수여서 1분위 10분위 모두 유니크한 값들만 가짐
+length(unique(quan1$cost_total))
+length(unique(quan10$cost_total))
+
+# 분포 비교 그림
+par(mfrow=c(1,2))
+plot(1:nrow(quan1),sort(quan1$cost_total),xlab='n',ylab='cost_total',main='1분위의 심결요양급여비용총액')
+plot(1:nrow(quan10),sort(quan10$cost_total),xlab='n',ylab='cost_total',main='10분위의 심결요양급여비용총액')
+
+# 두 분포의 분포를 겹쳐 그림
+# n이 다르기때문에 분포 형태의 결과만 봄
+par(mfrow=c(1,1))
+plot(1:nrow(quan10),sort(quan10$cost_total),col='red',xlab='n',ylab='cost_total',main='1분위,10분위의 심결요양급여비용총액')
+points(1:nrow(quan1),sort(quan1$cost_total),col='blue')
+
+
+# quan1의 x축에 20을 보정해서 겹쳐 그림.
+par(mfrow=c(1,1))
+plot(1:nrow(quan10),sort(quan10$cost_total),col='red',xlab='n',ylab='cost_total',main='1분위,10분위의 심결요양급여비용총액(보정)')
+points(21:(20+nrow(quan1)),sort(quan1$cost_total),col='blue')
+
+# Quantile 비교 그래프
+
+par(mfrow=c(1,1))
+plot(c(0,0.25,0.5,0.75,1),quantile(quan1$cost_total,c(0,0.25,0.5,0.75,1)),
+     col='red',pch=3,xlab='quantile',ylab='cost_total',main='1분위vs 10분위')
+points(c(0,0.25,0.5,0.75,1),quantile(quan1$cost_total,c(0,0.25,0.5,0.75,1)),col='blue',pch=2)
+legend(0,8.0*10^6,c('1분위','10분위'),cex=0.8,col=c("red","blue"),pch=c(3,2))
+
+summary(quan1$cost_total)
+summary(quan10$cost_total)
+
+# 이 경우, 모두 다 unique한 값이기 때문에 누적분포함수는 쉽계 계산된다.
+
+q1=sort(quan1$cost_total)
+q10=sort(quan10$cost_total)
+f1=(1:length(q1))/length(q1)
+f10=(1:length(q10))/length(q10)
+
+# 누적 분포 함수의 비교
+plot(q1,f1,type='l',col='red',xlab='cost_total',ylab='F(x)',main="1분위,10분위의 누적분포함수")
+lines(q10,f10,lty=1,col='blue')
+legend(1.0*10^7,0.5,c('1분위','10분위'),cex=0.8,col=c("red","blue"),lty=1)
+
+# 결과적으로 두 집단간에 분포에는 큰 차이가 없는 것으로 보인다.
+# 분위수들을 비교해본 결과 
+# 1분위의 경우 최소 124000 1분위 599230 중앙값 993320 평균 2342737 3분위수 3372040 최대 12588830
+# 10분위의 경우 최소 19220 1분위 599990 중앙값 1344280 평균 2213292 3분위수 2949870 최대 11895790
+# 으로 나타났는데, 결과적으로 모든 quantile에서 큰 차이를 보이지 않는다. 
+
+# 작업 후 느낀점 대부분의 전처리 문제와 요약통계량을 구하는 문제였지만, 누락값에 대한 처리를
+# 못했던 점이 아쉬웠다. 
