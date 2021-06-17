@@ -1,0 +1,88 @@
+# -*- coding: utf-8 -*-
+# 작업에 필요한 파이썬 모듈을 임포트 한다.
+# os 는 작업경로를 설정하기 위해 사용
+# PIL은 이미지 데이터를 다루기 위해 사용
+# XML은 XML 파일에 접근하여 다루기 위해 사용
+import os
+from PIL import Image
+import xml.etree.ElementTree as Et
+# VOC2007이 있는 폴더로 작업 directory 변경
+os.chdir("C:/Users/-----/Desktop/VOCtrainval_06-Nov-2007/VOCdevkit/VOC2007")
+
+# 증강한 사진을 저장할 새로운 디렉토리 생성
+# 예외 처리를 해서 이미 존재하는 경우 설정한 except문을 실행
+try:
+    os.mkdir("JPEGImages2")
+except:
+    print("이미 있는 파일입니다.")
+
+# 사진이 들어있는 JPEGImages에 접근하여 폴더 안에 있는 사진 파일이름을 저장
+image_file_ =  os.listdir("./JPEGImages")
+
+# 사진 데이터(X, 설명변수) 증강  
+for i in image_file_:
+    image_path = "JPEGImages/" + i # 현재 반복단계에서 사진데이터에 접근
+    before = Image.open(image_path) # 현재 사진 데이터
+    after = before.transpose(Image.FLIP_LEFT_RIGHT) # 새롭게 만든 좌우반전 사진데이터
+    name=str.split(i,".jpg")[0]+'-a.jpg' # 새로 만든 사진 데이터의 파일명 생성
+    path="./JPEGImages2/"
+    after.save(path+name) # 처음에 만든 새 디렉토리에 새 사진 생성
+
+
+# 사진 데이터를 증강을 했으니, 그에 따른 
+# 반응변수인 주석과 object의 위치를 변경해주어 새로운 주석 파일을 생성해야함.
+
+# 좌우 반전으로 증강을 했으므로 object들의 x좌표들만 바꿔주면 됌.
+# 하지만 기본 주석 파일에 사진에 대한 이름, 저장위치도 포함되므로
+# 이름과 저장위치도 바꿔주어야 정확한 주석 파일을 완성할 수 있다.
+
+# 주석 XML 파일이 있는 Annotations에 접근하여 폴더 안에 있는 주석 파일이름을 저장
+tag_file_ =  os.listdir("./Annotations")
+
+# 증강한 주석 xml 파일을 저장할 새로운 디렉토리 생성 
+# 예외 처리를 해서 이미 존재하는 경우 설정한 except문을 실행
+try:
+    os.mkdir("./Annotations2")
+except:
+    print("이미 있는 파일입니다.")
+
+# 주석과 object의 좌표 수정하여 (Y,반응변수) 데이터 증강
+for data in tag_file_:
+    xml_path_  =  "./Annotations/"+ data # 현재 단계에서 주석파일에 접근
+    xml =  open(xml_path_, mode = 'r', encoding="utf-8") # 주석 파일을 오픈
+    xml_tree = Et.parse(xml) # 주석 파일 파싱
+    xml_root = xml_tree.getroot() # root 노드를 가져온다.
+    size = xml_root.find("size") # root 노드에서 부터 size 노드 접근
+    width = size.find("width") # size 노드에 있는 사진 너비 정보 접근 추 후 좌표 수정할 때 사용
+    objects = xml_root.findall("object") # object들에 접근 , 다수가 존재할 수 있으므로 findall 사용
+    
+    # 현재 주석이 담고있는 사진에 대한 정보 수정
+    xml_root.find('folder').text='JPEGImages2' # 새롭게 만든 사진 위치로 변경
+    xml_root.find('filename').text=str.split(data,".xml")[0]+'-a.jpg' # 새롭게 만든 파일 명으로 변경
+    
+    # Paskal VOC를 해서 수정했던 데이터만 있는지는 모르겠지만, 몇몇의 주석 파일에는
+    # path가 없다. 따라서 있는 주석 파일에는 새롭게 만든 사진의 path를 넣어준다.
+    try:
+        chpath=str.replace(xml_root.find('path').text,'JPEGImages','JPEGImages2')
+        xml_root.find('path').text=str.split(chpath,".jpg")[0]+'-a.jpg'
+    except:
+        pass
+    
+    # objects에 개별 단위별로 원본 좌표를 새롭게 수정된 좌표로 바꾸는 반복문   
+    # 최소 좌표는 사진 중심+(사진 중심 - 최대 좌표) = 사진의 너비 - 최대 좌표
+    # 최대 좌표는 사진 중심+(사진 중심 - 최소 좌표) = 사진의 너비 - 최소 좌표
+    for i in objects:
+        bndbox=i.find("bndbox") # object 한 객체내에 bndbox 접근
+        before_xmin=bndbox.find('xmin').text # 최소 좌표 
+        before_xmax=bndbox.find('xmax').text # 최대 좌표
+        after_xmin=str(int(width.text)-int(before_xmax)) # 업데이트 최소 좌표
+        after_xmax=str(int(width.text)-int(before_xmin)) # 업데이트 최대 좌표
+    
+        # 대칭 이동후 좌표를 대입
+        bndbox.find("xmin").text = after_xmin # 최소 좌표 수정
+        bndbox.find("xmax").text = after_xmax # 최대 좌표 수정
+
+    # xml 저장하기
+    name=str.split(data,".xml")[0]+'-a.xml'
+    path="./Annotations2/" # 새롭게 만든 디렉토리에 넣기 위해 주소 설정
+    xml_tree.write(path+name)  # 새롭게 만든 주석 파일을 저장  
