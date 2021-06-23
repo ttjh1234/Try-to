@@ -1,0 +1,141 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jun 18 13:39:21 2021
+
+@author: -----
+"""
+
+import os
+from PIL import Image
+import xml.etree.ElementTree as Et
+
+# VOC2007이 있는 폴더로 작업 directory 변경
+os.chdir("C:/Users/-----/Desktop/VOCtrainval_06-Nov-2007/VOCdevkit/VOC2007")
+
+# 증강한 사진을 저장할 새로운 디렉토리 생성
+# 예외 처리를 해서 이미 존재하는 경우 설정한 except문을 실행
+try:
+    os.mkdir("finaltest")
+except:
+    print("이미 있는 파일입니다.")
+
+# 사진이 들어있는 JPEGImages에 접근하여 폴더 안에 있는 사진 파일이름을 저장
+image_file_ =  os.listdir("./JPEGImages")
+
+# 사진 데이터(X, 설명변수) 증강  
+for i in image_file_:
+    image_path = "JPEGImages/" + i # 현재 반복단계에서 사진데이터에 접근
+    before = Image.open(image_path) # 현재 사진 데이터
+    after = before.rotate(-45,expand=True,fillcolor=None) # 새롭게 만든 시계방향 45도 사진데이터
+    name=str.split(i,".jpg")[0]+'-f.jpg' # 새로 만든 사진 데이터의 파일명 생성
+    path="./finaltest/"
+    after.save(path+name) # 처음에 만든 새 디렉토리에 새 사진 생성
+
+
+# 사진 데이터를 증강을 했으니, 그에 따른 
+# 반응변수인 주석과 object의 위치를 변경해주어 새로운 주석 파일을 생성해야함.
+
+# 시계 방향으로 45도 회전 변환으로 증강을 했으므로 object들의 x좌표,y좌표 모두 바꿔야함.
+# 또, 기본 주석 파일에 사진에 대한 이름, 저장위치도 포함되므로
+# 이름과 저장위치도 바꿔주어야 정확한 주석 파일을 완성할 수 있다.
+
+# 변환 좌표 구하는 코드 함수 작성 
+# 사진의 정확한 객체 탐지를 위해, rotation시 expand를 이용하여 잘림을 방지
+# 그로 인해, 원본 사이즈보다 더 커진 사진을 가지게 된다.
+# 따라서, 변환된 크기와 좌표를 알아야 정확한 사각형을 구할 수 있다.
+# 하지만, 변환된 좌표를 주어진 상태에서 구하기는 힘들기 때문에, 
+# 원점으로 이동을 시킨 뒤 구함
+# 시계 방향으로 45도 돌리면, 전체 사진 크기가 expand로 인해 더 커지고,
+# 사진의 크기가 한변이 (원본W+원본H)/sqrt(2)가 된다. 
+# 원점으로 이동 시키기 위해 기존 사각형 박스를 원점에 대응하는 코드가 짜여야함.
+# 추가로, 45도 변환 함수는 x=rcos(k) 와 y=rsin(k) 에서 k+v로 바뀌었을시
+# x'=rcos(k+v)=rcos(k)cos(v)-rsin(k)sin(v) 이용
+# y'=rsin(k+v)=rsin(k)cos(v)+rcos(k)sin(v) 이용
+# 변경된 좌표를 다시 사이즈가 커진 사진의 중심으로 부터 재배치함.
+
+
+def transform_coord(w,h,xmin,xmax,ymin,ymax):
+    after_width=int((int(w.text)+int(h.text))/(2**(1/2)))
+    after_height=int((int(w.text)+int(h.text))/(2**(1/2)))
+    
+    move_bndbox=[(int(xmin)-int(width.text)/2,int(height.text)/2-int(ymin)),
+                (int(xmin)-int(width.text)/2,int(height.text)/2-int(ymax)),
+                (int(xmax)-int(width.text)/2,int(height.text)/2-int(ymax)),
+                (int(xmax)-int(width.text)/2,int(height.text)/2-int(ymin))]
+    o_trans=[]
+    for bndbox in move_bndbox:
+        x, y=bndbox
+        after_x=(x+y)/(2**(1/2))
+        after_y=(y-x)/(2**(1/2))
+        o_trans.append((after_x,after_y))
+    
+    after_xmin=int(o_trans[1][0]+after_width/2)
+    after_xmax=int(o_trans[3][0]+after_width/2)
+    after_ymin=int(after_height/2-o_trans[0][1])
+    after_ymax=int(after_height/2-o_trans[2][1])
+    
+    after={'after_xmin':str(after_xmin),'after_xmax':str(after_xmax),
+          'after_ymin':str(after_ymin),'after_ymax':str(after_ymax),
+          'after_width':str(after_width),'after_height':str(after_height)}
+    return(after)    
+
+
+
+
+# 주석 XML 파일이 있는 Annotations에 접근하여 폴더 안에 있는 주석 파일이름을 저장
+tag_file_ =  os.listdir("./Annotations")
+
+# 증강한 주석 xml 파일을 저장할 새로운 디렉토리 생성 
+# 예외 처리를 해서 이미 존재하는 경우 설정한 except문을 실행
+try:
+    os.mkdir("./final_Annot")
+except:
+    print("이미 있는 파일입니다.")
+
+# 주석과 object의 좌표 수정하여 (Y,반응변수) 데이터 증강
+for data in tag_file_:
+    xml_path_  =  "./Annotations/"+ data # 현재 단계에서 주석파일에 접근
+    xml =  open(xml_path_, mode = 'r', encoding="utf-8") # 주석 파일을 오픈
+    xml_tree = Et.parse(xml) # 주석 파일 파싱
+    xml_root = xml_tree.getroot() # root 노드를 가져온다.
+    size = xml_root.find("size") # root 노드에서 부터 size 노드 접근
+    width = size.find("width") # size 노드에 있는 사진 너비 정보 접근 
+    height=size.find("height") # size 노드에 있는 높이 너비 정보 접근
+    objects = xml_root.findall("object") # object들에 접근 , 다수가 존재할 수 있으므로 findall 사용
+    
+    # 현재 주석이 담고있는 사진에 대한 정보 수정
+    xml_root.find('folder').text='finaltest' # 새롭게 만든 사진 위치로 변경
+    xml_root.find('filename').text=str.split(data,".xml")[0]+'-f.jpg' # 새롭게 만든 파일 명으로 변경
+    
+    # Paskal VOC를 해서 수정했던 데이터만 있는지는 모르겠지만, 몇몇의 주석 파일에는
+    # path가 없다. 따라서 있는 주석 파일에는 새롭게 만든 사진의 path를 넣어준다.
+    try:
+        chpath=str.replace(xml_root.find('path').text,'JPEGImages','finaltest')
+        xml_root.find('path').text=str.split(chpath,".jpg")[0]+'-f.jpg'
+    except:
+        pass
+
+    # bndbox 수정 코드 
+    for i in objects:
+        bndbox=i.find("bndbox") # object 한 객체내에 bndbox 접근
+        xmin=bndbox.find('xmin').text # x최소 좌표 
+        xmax=bndbox.find('xmax').text# x최대 좌표
+        ymin=bndbox.find('ymin').text # y최소 좌표 
+        ymax=bndbox.find('ymax').text# y최대 좌표 
+    
+        # 변환된 좌표를 구하는 코드는 위에서 미리 정의한 함수를 사용
+        
+        after=transform_coord(width, height, xmin, xmax, ymin, ymax)
+        
+        # 변환된 위치를 주석 파일에 writing 
+        bndbox.find('xmin').text=after['after_xmin']
+        bndbox.find('xmax').text=after['after_xmax']
+        bndbox.find('ymin').text=after['after_ymin']
+        bndbox.find('ymax').text=after['after_ymax']
+    
+    # 주석에 증강된 사진의 크기를 다시 지정 
+    xml_root.find("size").find("width").text=after['after_width']
+    xml_root.find("size").find("height").text=after['after_height'] 
+    name=str.split(data,".xml")[0]+'-f.xml' 
+    path="./final_annot/" # 새롭게 만든 디렉토리에 넣기 위해 주소 설정
+    xml_tree.write(path+name)  # 새롭게 만든 주석 파일을 저장
