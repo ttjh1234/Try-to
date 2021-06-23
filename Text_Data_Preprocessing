@@ -1,0 +1,159 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jun 18 17:05:55 2021
+
+@author: -----
+"""
+
+from tqdm import tqdm
+import pandas as pd
+import numpy as np
+import re
+import copy
+import random
+import os
+from konlpy.tag import Okt
+
+# 한글 형태소 분석을 위한 Konlpy의 Okt 호출
+okt=Okt()
+
+# 작업 디렉토리 지정
+os.chdir("C:/Users/-----/Desktop/text")
+
+# 데이터를 pandas의 데이터프레임으로 불러오기
+data = pd.read_csv("total_articles_100.csv", encoding='cp949')
+type(data)
+data.columns
+data.head
+# 데이터의 문단 열만을 추출
+data = list(data['content_new'])
+# 데이터 문단 확인
+data[:1]
+
+# 데이터를 문장 단위로 추출
+data_s = [x.split('. ') for x in data] 
+print(len(data_s))
+# 100 = 100개의 문단이 존재
+
+# 각 문단에는 .으로 구별된 문장으로 나뉘어짐.
+data_s[0]
+
+# 각 문장을 명사를 기준으로 분리함.
+data_okt = []
+for i in tqdm(range(len(data_s))):
+    data_okt += [okt.nouns(sentence) for sentence in data_s[i]]
+# 총 문장의 개수
+len(data_okt)
+data_okt[0]
+
+
+# 단어 사전 정의 
+# data_okt의 모든 문장을 탐색하면서 처음 등장한 단어를 단어를 키로 인덱스를 지정
+# 패딩을 위해 idx 0을 비워 1부터 시작.
+word2idx = {}
+idx = 1
+for i in range(len(data_okt)):
+    for j in range(len(data_okt[i])):
+        if data_okt[i][j] not in word2idx:
+            word2idx[data_okt[i][j]] = idx
+            idx += 1
+word2idx
+word2idx['PAD'] = 0
+# 패딩을 제외하고 3027 개의 명사를 가지고 있는 단어 사전 구축
+print('전체 단어 개수:', len(word2idx))
+# 3028
+
+# 각 문장의 단어들을 단어 사전으로 정의한 숫자로 변환
+sentence_idx = []
+for i in tqdm(range(len(data_okt))):
+    temp = [word2idx.get(x) for x in data_okt[i]]
+    sentence_idx.append(temp)
+    
+# 각 문장과 동일하게 988개의 문장을 가짐.
+len(sentence_idx)
+sentence_idx[0]
+
+# 동시 출현 단어 쌍을 찾기위해, 문장을 원 핫 인코딩으로 변환
+# 원 핫 인코딩 변환 함수로 단어 사전의 개수 3028개 만큼의 0을 가진 벡터 생성
+# 함수를 통과하며 단어가 들어왔을 때, 단어 사전에 대응되는 번호가 1이 됌.
+ 
+def onehot_encoding(word, dic):
+    onehot_vector = [0] * (len(dic))
+    index = dic[word]
+    onehot_vector[index] = 1
+    return onehot_vector
+
+# 예시 코드 #
+a=onehot_encoding(data_okt[0][0],word2idx)
+b=onehot_encoding(data_okt[0][1],word2idx)
+
+
+# 이제 각 문장을 원 핫 인코딩 적용
+# data_okt의 각 문장을 들어가서 각 단어들을 1로 매칭하기 위해 
+# 반복문을 2개 사용하여 구현.
+# 위에서 정의한 함수를 사용하게 되면, 문장에 같은 단어가 2번 이상 나오면
+# 그 단어의 값이 2이상이 되게 된다. 따라서 추후에 한 문장에 같은 단어를 나온 횟수를
+# 찾을 때, 오류를 범한다. 그렇기 때문에, 마지막 dictionary에 넣기 전에 
+# 2 이상을 revise 라는 정의 함수를 사용하여 오류를 막았다. 
+   
+def revise(item):
+    if item>=2:
+        return 1
+    return item
+
+a=[]
+b=[]
+sdict={}
+
+for i in range(len(data_okt)):
+    for j in range(len(data_okt[i])):
+        c=list()
+        if j==0:
+            a=onehot_encoding(data_okt[i][j],word2idx);c=a;continue
+        b=onehot_encoding(data_okt[i][j],word2idx)
+        for n1, n2 in zip(a,b):
+            c.append(n1+n2)    
+        a=c
+    c=list(map(revise,c))
+    sdict[i]=c
+    
+sdf=pd.DataFrame(sdict)
+print(sdf.head)
+# 현재 행이 단어 열이 문장이기 때문에 전치가 필요. 전치 후,
+# 각 열별로 내적을 해서 가장 큰 값을 가지는 열 쌍을 찾자. 그 중 5번째가 정답.
+# 동시 출현 빈도 높은거 찾기
+# 동시 출현 빈도를 찾기 위해, 두 원 핫 벡터의 내적을 해야하는데, 
+# numpy의 dot 함수를 사용하여 내적을 구현
+# dot함수를 사용하기 위해 데이터를 numpy 배열로 바꾸고, 전치시켜 열을 단어로 함.
+
+type(sdict)
+ss=sdict
+for i in range(len(sdict)):
+    ss[i]=np.array(sdict[i])
+sdf2=pd.DataFrame(ss)
+final=sdf2.T
+
+# 총 3028개 중 패딩을 위한 0을 제외하고 3027개 중 2개의 조합 
+# 3027C2 = 4579851개가 나옴.  
+# 각 결과값을 i,j 순서쌍을 키로 하여 내적값을 저장.
+sol={}
+for i in range(1,3027):
+   for j in range(i+1,3028):
+        sol[(i,j)]=np.dot(final[i],final[j])
+        
+len(sol)
+# 4579851
+sol
+
+final=sorted(zip(sol.values(),sol.keys()),reverse=True)
+final[:10]
+final[0][0]
+## 5번째로 빈도 큰 순서쌍 (23,91) 이 56 번 같은 문장에서 나옴
+idx2word = {i:x for x,i in word2idx.items()}
+
+# 가장 높은 순위부터 10번째 출력
+for i in range(0,10):
+    print("빈도수가 높은 {}번째 조합은 ({} , {}) 으로 총 {} 번 같이 나왔다.\n".format(i+1,
+                           idx2word[final[i][1][0]],idx2word[final[i][1][1]],final[i][0]))
+    
+# 따라서 5번째로 가장 많이 나온 단어 쌍은 경제와 미국이다.
