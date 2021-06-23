@@ -1,0 +1,180 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jun 18 20:47:26 2021
+
+@author: -----
+"""
+
+import os
+from pydub import AudioSegment
+import scipy.io.wavfile
+import numpy as np
+import matplotlib.pyplot as plt
+from pydub.playback import play
+import librosa
+import librosa.display
+import pandas as pd
+
+# 오디오 파일을 다운 받은 저장위치로 현재 작업 디렉토리 변경
+os.chdir('C:/Users/-----/Desktop/audio2')
+file_=os.listdir()
+file_
+
+# target값 분리
+target=[]
+
+# 로지스틱 회귀 분석을 위해 target값을 미리 설정
+for i in range(len(file_)):
+    class_val=file_[i].split("_")[1].split('.')[0]
+    target.append(class_val)
+
+
+# 파일 내 Sampling rate와 bit channels를 확인
+for i in range(len(file_)):
+    audio_=AudioSegment.from_file(file_[i],format="m4a")
+    print("sampling:",audio_.frame_rate,
+          "\nbit depth:",audio_.sample_width,
+          "\nchannels:",audio_.channels)
+
+# Sampling rate가 다른것이 존재한다. 나머지 비트와 채널은 같음.
+# 먼저 Samplingrate를 44100으로 변경해주고 소리가 나는 부분만 자름.
+# 이동평균법을 사용하여 소리의 파형이 큰 곳만 가져온다.
+def moving_avg(x, n):
+    cumsum=np.cumsum(np.insert(x, 0 ,0))
+    return(cumsum[n:]-cumsum[:-n])/float(n)
+
+sounddata=[]
+
+for i in range(len(file_)):
+    audio_=AudioSegment.from_file(file_[i],format="m4a")
+    audio_ = audio_.set_frame_rate(44100)
+    x = audio_.get_array_of_samples()
+    x2=np.array(x,dtype='float32')**2
+    x_move=moving_avg(x2,n=1000)
+    y=x[np.array(np.where(x_move>10000)).min()-1000:np.array(np.where(x_move>10000)).max()+1000]
+    sounddata.append(y)    
+
+
+len(sounddata)
+# 66개
+len(sounddata[0])
+# 17816
+len(sounddata[40])
+# 17428
+type(sounddata[0])
+
+# 이렇게 유의미한 소리가 나는 부분만 잘랐지만, 나중에 모형 적합을 하기 위해
+# 똑같은 사이즈 (길이) 가 필요하기 때문에, 자른 데이터 중 가장 짧은 데이터를 기준으로
+# 크기를 다시 자른다.
+
+sl=[]
+for i in range(len(sounddata)):
+    s=len(sounddata[i])
+    sl.append(s)
+
+
+max(sl)
+min(sl)
+np.mean(sl)
+
+# 최소 길이 14721 
+# 중간 길이 58797.40909090909
+# 최대 길이 187928
+# 자를 경우 안들리는 경우가 있어, 가장 큰 길이로 맞춘다. 
+# 아래 코딩을 통해 0을 채워놓았는데, 음질이 깨지고 이상한 소리가 나서
+# 아래와 같은 방법은 입력 데이터의 길이를 맞추는데 부적합하다고 판단
+# 따라서 MFCC로 20개의 특성 벡터를 뽑고 길이를 맞추는 작업을 진행한다.
+
+#sounddata2=[]
+#for i in range(len(sounddata)):
+    #a=sounddata[i]
+    #n=187928-len(a)
+    #b=n*[0]
+    #b=list(a)+b    
+    #sounddata2.append(b)
+#len(sounddata2[0])    
+
+#sl2=[]
+#for i in range(len(sounddata2)):
+    #s2=len(sounddata2[i])
+    #sl2.append(s2)
+
+#for i in range(len(sounddata2)):
+    #b_s_audio =  AudioSegment(data =np.array(sounddata2[i]).tobytes(),
+                              #frame_rate = 44100,
+                              #sample_width = 2,
+                              #channels = 1)
+    #b_s_audio.channels
+    #play(b_s_audio)
+    
+
+# MFCC 를 통해 모든 사운드 데이터를 변환을 하면, (20,x)의 크기를 갖는데
+# 사운드 데이터가 유의미한 부분만 잘랐어도 원래 오디오 데이터의 길이가 달랐으므로, 
+# MFCC 를해도 크기가 다르다. 따라서 크기가 다르면 로지스틱 모형을 적합시킬 때, 
+# 설명변수의 input을 2차원으로 기대하기 때문에, 데이터를 합친다.
+# 즉, 이를 평균을 내서 (20,) 를 만드는 작업을 한다.
+for i in range(len(sounddata)):
+    sd = np.array(sounddata[i], dtype = 'float32')
+    b_mfcc= librosa.feature.mfcc(y=sd, sr=44100, 
+                             n_fft = 1000, hop_length = 500, n_mfcc=20, dct_type=2)
+    print(b_mfcc.shape)
+
+
+dataset=[]
+for i in range(len(target)):
+    sd = np.array(sounddata[i], dtype = 'float32')
+    mfcc= librosa.feature.mfcc(y=sd, sr=44100, 
+                             n_fft = 1000, hop_length = 500, n_mfcc=20, dct_type=2)
+    if target[i]=='a':
+        dataset.append((mfcc,0))
+    elif target[i]=='e': 
+        dataset.append((mfcc,1))
+
+
+librosa.display.specshow(dataset[36][0], sr=44100, x_axis='time')
+librosa.display.specshow(dataset[37][0], sr=44100, x_axis='time')
+
+## 각각을 분리하고, x는 각 오디오 데이터마다 크기가 다르므로, 평균을 하여 데이터를 변환.
+
+x = [a for (a,b) in dataset]
+y = [b for (a,b) in dataset]
+
+x_m=[]
+for i in range(len(x)):
+    e=x[i].mean(axis=1)
+    x_m.append(e)
+
+x=np.array(x_m)
+
+from sklearn.preprocessing import StandardScaler
+x_s=StandardScaler().fit_transform(x)
+x_s
+
+## x_s[0::2]는 a 발음들의 스펙토그램 양상
+librosa.display.specshow(x_s[0::2],sr=44100)
+## x_s[1::2]는 e 발음들의 스펙토그램 양상
+librosa.display.specshow(x_s[1::2],sr=44100)
+
+x.shape
+# (66,20) 총 66개의 소리 데이터가 각각 20개의 특성 벡터로 축약됌.
+
+y=np.array(y)
+y.shape
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train, y_test = train_test_split(x_s,y,test_size=0.2,random_state=42 )
+
+lr = LogisticRegression(random_state=42)
+lr.fit(x_train,y_train)
+
+print(lr.score(x_test,y_test))
+# 0.9285714285..
+from sklearn.model_selection import cross_val_predict
+y_train_pred=cross_val_predict(lr,x_train,y_train,cv=3)
+
+from sklearn.metrics import confusion_matrix
+confusion_matrix(y_train,y_train_pred)
+
+y_test_pred=lr.predict(x_test)
+
+confusion_matrix(y_test,y_test_pred)
